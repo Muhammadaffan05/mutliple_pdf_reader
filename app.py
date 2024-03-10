@@ -1,63 +1,102 @@
 import streamlit as st
+from PyPDF2 import PdfReader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+import os
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+import google.generativeai as genai
+from langchain.vectorstores import FAISS
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.chains.question_answering import load_qa_chain
+from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
 
-load_dotenv() ##load all the nevironment variables
-import os
-import google.generativeai as genai
-
-from youtube_transcript_api import YouTubeTranscriptApi
-
+load_dotenv()
+os.getenv("GOOGLE_API_KEY")
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-prompt="""As a LinkedIn post caption generator, your role is to streamline the process of crafting engaging
-     captions for LinkedIn posts. You'll be provided with transcript text from videos, and your task is to distill
-     the essence of the entire video into a concise and compelling LinkedIn post caption. Your caption should be structured
-     in  paragraph form, ensuring clarity 
-     and brevity while conveying the key insights from the video. 
-     Your goal is to create professional and informative captions within a 250-word limit. 
-     Your input will help LinkedIn users quickly grasp the main points of the video and encourage them to engage with the content. 
-     Please provide a LinkedIn caption for the given transcript text
-     that effectively summarizes the video's content and captivates the audience. """
+
+def get_pdf_text(pdf_docs):
+    text=""
+    for pdf in pdf_docs:
+        pdf_reader= PdfReader(pdf)
+        for page in pdf_reader.pages:
+            text+= page.extract_text()
+    return  text
 
 
-## getting the transcript data from yt videos
-def extract_transcript_details(youtube_video_url):
-    try:
-        video_id=youtube_video_url.split("=")[1]
-        
-        transcript_text=YouTubeTranscriptApi.get_transcript(video_id)
 
-        transcript = ""
-        for i in transcript_text:
-            transcript += " " + i["text"]
+def get_text_chunks(text):
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
+    chunks = text_splitter.split_text(text)
+    return chunks
 
-        return transcript
 
-    except Exception as e:
-        raise e
+def get_vector_store(text_chunks):
+    embeddings = GoogleGenerativeAIEmbeddings(model = "models/embedding-001")
+    vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
+    vector_store.save_local("faiss_index")
+
+
+def get_conversational_chain():
+
+    prompt_template = """
+    Answer the question as detailed as possible from the provided context, make sure to provide all the details, if the answer is not in
+    provided context just say, "answer is not available in the context", don't provide the wrong answer\n\n
+    Context:\n {context}?\n
+    Question: \n{question}\n
+
+    Answer:
+    """
+
+    model = ChatGoogleGenerativeAI(model="gemini-pro",
+                             temperature=0.3)
+
+    prompt = PromptTemplate(template = prompt_template, input_variables = ["context", "question"])
+    chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
+
+    return chain
+
+
+
+def user_input(user_question):
+    embeddings = GoogleGenerativeAIEmbeddings(model = "models/embedding-001")
     
-## getting the summary based on Prompt from Google Gemini Pro
-def generate_gemini_content(transcript_text,prompt):
+    new_db = FAISS.load_local("faiss_index", embeddings , allow_dangerous_deserialization=True)
+    docs = new_db.similarity_search(user_question)
 
-    model=genai.GenerativeModel("gemini-pro")
-    response=model.generate_content(prompt+transcript_text)
-    return response.text
+    chain = get_conversational_chain()
 
-st.title("LinkedIn post caption generator")
-youtube_link = st.text_input("Enter YouTube Video Link:")
+    
+    response = chain(
+        {"input_documents":docs, "question": user_question}
+        , return_only_outputs=True)
 
-if youtube_link:
-    video_id = youtube_link.split("=")[1]
-    print(video_id)
-    st.image(f"http://img.youtube.com/vi/{video_id}/0.jpg", use_column_width=True)
-
-if st.button("Get Caption For linkedln"):
-    transcript_text=extract_transcript_details(youtube_link)
-
-    if transcript_text:
-        summary=generate_gemini_content(transcript_text,prompt)
-        st.markdown("## Detailed Notes:")
-        st.write(summary)
+    print(response)
+    st.write("Reply: ", response["output_text"])
 
 
 
+
+def main():
+    st.set_page_config("Chat PDF")
+    st.header("Chat with PDF using Gemini-Pro")
+
+    user_question = st.text_input("Ask a Question from the PDF Files")
+
+    if user_question:
+        user_input(user_question)
+
+    with st.sidebar:
+        st.title("Menu:")
+        pdf_docs = st.file_uploader("Upload your PDF Files and Click on the Submit & Process Button", accept_multiple_files=True)
+        if st.button("Submit & Process"):
+            with st.spinner("Processing..."):
+                raw_text = get_pdf_text(pdf_docs)
+                text_chunks = get_text_chunks(raw_text)
+                get_vector_store(text_chunks)
+                st.success("Done")
+
+
+
+if __name__ == "__main__":
+    main()
