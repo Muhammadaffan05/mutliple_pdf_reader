@@ -1,0 +1,21 @@
+# Chat PDF with Gemini-Pro
+
+## Overview
+Chat PDF with Gemini-Pro is a Python application designed to facilitate seamless interaction and querying of information within PDF documents. Leveraging advanced AI technology, particularly Google's Gemini-Pro API, the application allows users to upload multiple PDF files simultaneously and engage in conversational queries. This project integrates cutting-edge technologies to provide users with an intuitive and efficient experience for extracting insights from textual data encapsulated within PDF documents.
+
+## Features
+- **PDF Upload:** Users can upload multiple PDF files at once, facilitating batch processing.
+- **Conversational Interaction:** Utilizing Google's Gemini-Pro API, the application enables users to pose questions in a conversational format and receive detailed answers derived from the context of the provided PDF documents.
+- **Automatic Text Extraction:** The application automatically extracts text from uploaded PDF documents, ensuring seamless integration with the conversational querying system.
+- **Efficient Text Processing:** Text extracted from PDF documents is segmented into manageable chunks, optimizing processing speed and resource utilization.
+- **Embedding and Vectorization:** The application employs Google's Generative AI Embeddings for converting textual data into vector representations, facilitating efficient similarity search and information retrieval.
+- **Question-Answer Chain:** A sophisticated question-answering chain is integrated into the system, enabling accurate and contextually relevant responses to user queries.
+
+## Requirements
+- Python 3.7 or higher
+- Streamlit
+- PyPDF2
+- Langchain
+- Google Generative AI
+- FAISS
+- Dotenv
